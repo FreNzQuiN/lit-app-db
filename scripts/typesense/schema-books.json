@@ -1,0 +1,15 @@
+{
+  "name": "books",
+  "fields": [
+    { "name": "id", "type": "string" },
+    { "name": "tenantId", "type": "string", "facet": true },
+    { "name": "judul", "type": "string" },
+    { "name": "pengarang", "type": "string" },
+    { "name": "kategori", "type": "string[]", "facet": true },
+    { "name": "tipe", "type": "string", "facet": true },
+    { "name": "tahun", "type": "int32", "facet": true },
+    { "name": "metadata_spesifik", "type": "string", "index": false, "optional": true }
+  ],
+  "default_sorting_field": "tahun",
+  "enable_nested_fields": false
+}

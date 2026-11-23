@@ -1,0 +1,144 @@
+name: lit-app-db
+
+networks:
+  litnet:
+    driver: bridge
+
+volumes:
+  cfg1-data:
+  cfg2-data:
+  cfg3-data:
+  rs1p-data:
+  rs1s1-data:
+  rs1s2-data:
+  rs2p-data:
+  rs2s1-data:
+  rs2s2-data:
+  redis-s1m-data:
+  redis-s1s-data:
+  redis-s2m-data:
+  redis-s2s-data:
+  ts1-data:
+  ts2-data:
+  ts3-data:
+  neo4j-data:
+
+services:
+  cfg1:
+    image: mongo:7.0
+    command: ["mongod", "--configsvr", "--replSet", "cfgRS", "--bind_ip_all", "--port", "27017"]
+    volumes: ["cfg1-data:/data/db"]
+    networks: [litnet]
+
+  cfg2:
+    image: mongo:7.0
+    command: ["mongod", "--configsvr", "--replSet", "cfgRS", "--bind_ip_all", "--port", "27017"]
+    volumes: ["cfg2-data:/data/db"]
+    networks: [litnet]
+
+  cfg3:
+    image: mongo:7.0
+    command: ["mongod", "--configsvr", "--replSet", "cfgRS", "--bind_ip_all", "--port", "27017"]
+    volumes: ["cfg3-data:/data/db"]
+    networks: [litnet]
+
+  shard1p:
+    image: mongo:7.0
+    command: ["mongod", "--shardsvr", "--replSet", "rs1", "--bind_ip_all", "--port", "27017"]
+    volumes: ["rs1p-data:/data/db"]
+    networks: [litnet]
+
+  shard1s1:
+    image: mongo:7.0
+    command: ["mongod", "--shardsvr", "--replSet", "rs1", "--bind_ip_all", "--port", "27017"]
+    volumes: ["rs1s1-data:/data/db"]
+    networks: [litnet]
+
+  shard1s2:
+    image: mongo:7.0
+    command: ["mongod", "--shardsvr", "--replSet", "rs1", "--bind_ip_all", "--port", "27017"]
+    volumes: ["rs1s2-data:/data/db"]
+    networks: [litnet]
+
+  shard2p:
+    image: mongo:7.0
+    command: ["mongod", "--shardsvr", "--replSet", "rs2", "--bind_ip_all", "--port", "27017"]
+    volumes: ["rs2p-data:/data/db"]
+    networks: [litnet]
+
+  shard2s1:
+    image: mongo:7.0
+    command: ["mongod", "--shardsvr", "--replSet", "rs2", "--bind_ip_all", "--port", "27017"]
+    volumes: ["rs2s1-data:/data/db"]
+    networks: [litnet]
+
+  shard2s2:
+    image: mongo:7.0
+    command: ["mongod", "--shardsvr", "--replSet", "rs2", "--bind_ip_all", "--port", "27017"]
+    volumes: ["rs2s2-data:/data/db"]
+    networks: [litnet]
+
+  mongos:
+    image: mongo:7.0
+    command: ["mongos", "--configdb", "cfgRS/cfg1:27017,cfg2:27017,cfg3:27017", "--bind_ip_all", "--port", "27017"]
+    ports: ["27017:27017"]
+    volumes: ["./scripts/mongo:/scripts:ro"]
+    networks: [litnet]
+    depends_on: [cfg1, cfg2, cfg3, shard1p, shard1s1, shard1s2, shard2p, shard2s1, shard2s2]
+
+  redis-s1m:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redis-s1m-data:/data"]
+    networks: [litnet]
+
+  redis-s1s:
+    image: redis:7-alpine
+    command: ["redis-server", "--replicaof", "redis-s1m", "6379", "--appendonly", "yes"]
+    volumes: ["redis-s1s-data:/data"]
+    networks: [litnet]
+    depends_on: [redis-s1m]
+
+  redis-s2m:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redis-s2m-data:/data"]
+    networks: [litnet]
+
+  redis-s2s:
+    image: redis:7-alpine
+    command: ["redis-server", "--replicaof", "redis-s2m", "6379", "--appendonly", "yes"]
+    volumes: ["redis-s2s-data:/data"]
+    networks: [litnet]
+    depends_on: [redis-s2m]
+
+  typesense1:
+    image: typesense/typesense:0.25.2
+    command: ["--data-dir=/data", "--api-key=${TYPESENSE_API_KEY:-litapp-secret}", "--api-port=8108", "--peering-port=8107", "--peering-address=typesense1", "--nodes=/etc/typesense/nodes"]
+    ports: ["18108:8108"]
+    volumes: ["ts1-data:/data", "./config/typesense-nodes:/etc/typesense/nodes:ro"]
+    networks: [litnet]
+
+  typesense2:
+    image: typesense/typesense:0.25.2
+    command: ["--data-dir=/data", "--api-key=${TYPESENSE_API_KEY:-litapp-secret}", "--api-port=8108", "--peering-port=8107", "--peering-address=typesense2", "--nodes=/etc/typesense/nodes"]
+    ports: ["18109:8108"]
+    volumes: ["ts2-data:/data", "./config/typesense-nodes:/etc/typesense/nodes:ro"]
+    networks: [litnet]
+
+  typesense3:
+    image: typesense/typesense:0.25.2
+    command: ["--data-dir=/data", "--api-key=${TYPESENSE_API_KEY:-litapp-secret}", "--api-port=8108", "--peering-port=8107", "--peering-address=typesense3", "--nodes=/etc/typesense/nodes"]
+    ports: ["18110:8108"]
+    volumes: ["ts3-data:/data", "./config/typesense-nodes:/etc/typesense/nodes:ro"]
+    networks: [litnet]
+
+  neo4j:
+    image: neo4j:5.20-community
+    environment:
+      NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD:-litapp-pass}"
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 512m
+    ports: ["7474:7474", "7687:7687"]
+    volumes: ["neo4j-data:/data", "./scripts/neo4j:/var/lib/neo4j/import:ro"]
+    networks: [litnet]

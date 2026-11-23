@@ -1,0 +1,63 @@
+CREATE CONSTRAINT user_id IF NOT EXISTS FOR (u:User) REQUIRE u.userId IS UNIQUE;
+CREATE CONSTRAINT book_id IF NOT EXISTS FOR (b:Book) REQUIRE b.bookId IS UNIQUE;
+CREATE CONSTRAINT category_name IF NOT EXISTS FOR (c:Category) REQUIRE c.nama IS UNIQUE;
+
+MERGE (u:User {userId:'u-ub-01'}) SET u.tenantId='ub', u.nim='245150700111044', u.nama='Muhammad Faza Husain Baihaqi', u.role='mahasiswa';
+MERGE (u:User {userId:'u-ub-02'}) SET u.tenantId='ub', u.nim='245150707111040', u.nama='Husein Sidharta Muhammad', u.role='mahasiswa';
+MERGE (u:User {userId:'u-ub-03'}) SET u.tenantId='ub', u.nim='198701010101001', u.nama='Bu Rina', u.role='dosen';
+MERGE (u:User {userId:'u-ub-04'}) SET u.tenantId='ub', u.nim='198512312312001', u.nama='Pak Bagas', u.role='pustakawan';
+MERGE (u:User {userId:'u-ub-05'}) SET u.tenantId='ub', u.nim='199003032003001', u.nama='Sinta Wulandari', u.role='admin';
+MERGE (u:User {userId:'u-unair-01'}) SET u.tenantId='unair', u.nim='231510700111001', u.nama='Andi Pratama', u.role='mahasiswa';
+MERGE (u:User {userId:'u-unair-02'}) SET u.tenantId='unair', u.nim='231510707111002', u.nama='Nadia Putri', u.role='mahasiswa';
+MERGE (u:User {userId:'u-unair-03'}) SET u.tenantId='unair', u.nim='198802022002001', u.nama='Dr. Dewi', u.role='dosen';
+
+MERGE (b:Book {bookId:'b-ub-01'}) SET b.tenantId='ub', b.judul='Basis Data NoSQL', b.tipe='buku_teks';
+MERGE (b:Book {bookId:'b-ub-02'}) SET b.tenantId='ub', b.judul='Sistem Rekomendasi', b.tipe='skripsi';
+MERGE (b:Book {bookId:'b-ub-03'}) SET b.tenantId='ub', b.judul='Laskar Pelangi', b.tipe='novel';
+MERGE (b:Book {bookId:'b-ub-04'}) SET b.tenantId='ub', b.judul='Jurnal Sistem Informasi Vol. 12', b.tipe='jurnal';
+MERGE (b:Book {bookId:'b-ub-05'}) SET b.tenantId='ub', b.judul='Python untuk Analisis Data', b.tipe='ebook';
+MERGE (b:Book {bookId:'b-ub-06'}) SET b.tenantId='ub', b.judul='Algoritma dan Struktur Data', b.tipe='buku_teks';
+MERGE (b:Book {bookId:'b-unair-01'}) SET b.tenantId='unair', b.judul='Basis Data Relasional', b.tipe='buku_teks';
+MERGE (b:Book {bookId:'b-unair-02'}) SET b.tenantId='unair', b.judul='Manajemen Perpustakaan Digital', b.tipe='buku_teks';
+MERGE (b:Book {bookId:'b-unair-03'}) SET b.tenantId='unair', b.judul='Sejarah Indonesia', b.tipe='buku_teks';
+
+MERGE (c:Category {nama:'Basis Data'});
+MERGE (c:Category {nama:'Teknologi'});
+MERGE (c:Category {nama:'Kecerdasan Buatan'});
+MERGE (c:Category {nama:'Skripsi'});
+MERGE (c:Category {nama:'Fiksi'});
+MERGE (c:Category {nama:'Novel'});
+MERGE (c:Category {nama:'Jurnal'});
+MERGE (c:Category {nama:'Sistem Informasi'});
+MERGE (c:Category {nama:'Pemrograman'});
+MERGE (c:Category {nama:'Data'});
+MERGE (c:Category {nama:'Algoritma'});
+MERGE (c:Category {nama:'Perpustakaan'});
+MERGE (c:Category {nama:'Manajemen'});
+MERGE (c:Category {nama:'Sejarah'});
+
+MATCH (u:User {userId:'u-ub-01'}), (b:Book {bookId:'b-ub-01'}) MERGE (u)-[:PINJAM {loanId:'l-ub-01', tenantId:'ub', tglPinjam:'2026-11-01', status:'dikembalikan'}]->(b);
+MATCH (u:User {userId:'u-ub-01'}), (b:Book {bookId:'b-ub-02'}) MERGE (u)-[:PINJAM {loanId:'l-ub-02', tenantId:'ub', tglPinjam:'2026-11-02', status:'dipinjam'}]->(b);
+MATCH (u:User {userId:'u-ub-02'}), (b:Book {bookId:'b-ub-01'}) MERGE (u)-[:PINJAM {loanId:'l-ub-03', tenantId:'ub', tglPinjam:'2026-10-20', status:'terlambat'}]->(b);
+MATCH (u:User {userId:'u-ub-02'}), (b:Book {bookId:'b-ub-03'}) MERGE (u)-[:PINJAM {loanId:'l-ub-04', tenantId:'ub', tglPinjam:'2026-11-05', status:'dipinjam'}]->(b);
+MATCH (u:User {userId:'u-ub-03'}), (b:Book {bookId:'b-ub-04'}) MERGE (u)-[:PINJAM {loanId:'l-ub-05', tenantId:'ub', tglPinjam:'2026-11-10', status:'dipinjam'}]->(b);
+MATCH (u:User {userId:'u-unair-01'}), (b:Book {bookId:'b-unair-01'}) MERGE (u)-[:PINJAM {loanId:'l-unair-01', tenantId:'unair', tglPinjam:'2026-11-01', status:'dikembalikan'}]->(b);
+MATCH (u:User {userId:'u-unair-02'}), (b:Book {bookId:'b-unair-01'}) MERGE (u)-[:PINJAM {loanId:'l-unair-02', tenantId:'unair', tglPinjam:'2026-11-03', status:'dipinjam'}]->(b);
+
+MATCH (b:Book {bookId:'b-ub-01'}), (c:Category {nama:'Basis Data'}) MERGE (b)-[:BERKATEGORI]->(c);
+MATCH (b:Book {bookId:'b-ub-01'}), (c:Category {nama:'Teknologi'}) MERGE (b)-[:BERKATEGORI]->(c);
+MATCH (b:Book {bookId:'b-ub-02'}), (c:Category {nama:'Kecerdasan Buatan'}) MERGE (b)-[:BERKATEGORI]->(c);
+MATCH (b:Book {bookId:'b-ub-02'}), (c:Category {nama:'Skripsi'}) MERGE (b)-[:BERKATEGORI]->(c);
+MATCH (b:Book {bookId:'b-ub-03'}), (c:Category {nama:'Fiksi'}) MERGE (b)-[:BERKATEGORI]->(c);
+MATCH (b:Book {bookId:'b-ub-03'}), (c:Category {nama:'Novel'}) MERGE (b)-[:BERKATEGORI]->(c);
+MATCH (b:Book {bookId:'b-ub-04'}), (c:Category {nama:'Jurnal'}) MERGE (b)-[:BERKATEGORI]->(c);
+MATCH (b:Book {bookId:'b-ub-04'}), (c:Category {nama:'Sistem Informasi'}) MERGE (b)-[:BERKATEGORI]->(c);
+MATCH (b:Book {bookId:'b-ub-05'}), (c:Category {nama:'Pemrograman'}) MERGE (b)-[:BERKATEGORI]->(c);
+MATCH (b:Book {bookId:'b-ub-05'}), (c:Category {nama:'Data'}) MERGE (b)-[:BERKATEGORI]->(c);
+MATCH (b:Book {bookId:'b-ub-06'}), (c:Category {nama:'Pemrograman'}) MERGE (b)-[:BERKATEGORI]->(c);
+MATCH (b:Book {bookId:'b-ub-06'}), (c:Category {nama:'Algoritma'}) MERGE (b)-[:BERKATEGORI]->(c);
+MATCH (b:Book {bookId:'b-unair-01'}), (c:Category {nama:'Basis Data'}) MERGE (b)-[:BERKATEGORI]->(c);
+MATCH (b:Book {bookId:'b-unair-01'}), (c:Category {nama:'Teknologi'}) MERGE (b)-[:BERKATEGORI]->(c);
+MATCH (b:Book {bookId:'b-unair-02'}), (c:Category {nama:'Perpustakaan'}) MERGE (b)-[:BERKATEGORI]->(c);
+MATCH (b:Book {bookId:'b-unair-02'}), (c:Category {nama:'Manajemen'}) MERGE (b)-[:BERKATEGORI]->(c);
+MATCH (b:Book {bookId:'b-unair-03'}), (c:Category {nama:'Sejarah'}) MERGE (b)-[:BERKATEGORI]->(c);
