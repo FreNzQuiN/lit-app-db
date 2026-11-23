@@ -67,7 +67,7 @@ services:
     ports: ["27017:27017"]
     volumes: ["./scripts/mongo:/scripts:ro"]
     networks: [litnet]
-    mem_limit: 150m
+    mem_limit: 400m
     restart: unless-stopped
     depends_on: [cfg1, shard1p, shard1s1, shard2p, shard2s1]
 
