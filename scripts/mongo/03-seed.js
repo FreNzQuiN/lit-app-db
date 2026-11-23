@@ -1,5 +1,5 @@
 const router = connect("mongodb://mongos:27017");
-const db = router.getDB("litapp");
+const db = router.getSiblingDB("litapp");
 
 const users = [
   { tenantId: "ub", userId: "u-ub-01", nim: "245150700111044", nama: "Muhammad Faza Husain Baihaqi", role: "mahasiswa", prodi: "Teknik Informatika", angkatan: 2024, email: "faza@ub.ac.id" },
@@ -57,4 +57,4 @@ const perTenant = db.books.aggregate([
   { $group: { _id: "$tenantId", total: { $sum: 1 } } },
   { $sort: { _id: 1 } }
 ]).toArray();
-print("BOOKS per tenant -> " + tojson(perTenant));
+print("BOOKS per tenant -> " + JSON.stringify(perTenant));

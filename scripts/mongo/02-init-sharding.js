@@ -1,10 +1,10 @@
 const router = connect("mongodb://mongos:27017");
-const admin = router.getDB("admin");
+const admin = router.getSiblingDB("admin");
 
 function run(label, cmd) {
   const res = admin.runCommand(cmd);
   if (res.ok !== 1 && res.code !== 48 && res.code !== 20 && res.code !== 59) {
-    throw new Error("FAIL " + label + " -> " + tojson(res));
+    throw new Error("FAIL " + label + " -> " + JSON.stringify(res));
   }
   print("OK " + label);
 }
@@ -13,7 +13,7 @@ run("addShard rs1", { addShard: "rs1/shard1p:27017,shard1s1:27017", name: "shard
 run("addShard rs2", { addShard: "rs2/shard2p:27017,shard2s1:27017", name: "shard2" });
 run("enableSharding litapp", { enableSharding: "litapp" });
 
-const db = router.getDB("litapp");
+const db = router.getSiblingDB("litapp");
 
 const validators = {
   users: {
@@ -151,9 +151,9 @@ for (const name of Object.keys(shardKeys)) {
 
   const res = admin.runCommand({ shardCollection: ns, key: shardKeys[name] });
   if (res.ok !== 1 && res.code !== 20 && res.code !== 59) {
-    throw new Error("FAIL shardCollection " + ns + " -> " + tojson(res));
+    throw new Error("FAIL shardCollection " + ns + " -> " + JSON.stringify(res));
   }
-  print("SHARD " + ns + " -> " + tojson(shardKeys[name]));
+  print("SHARD " + ns + " -> " + JSON.stringify(shardKeys[name]));
 }
 
 print("CLUSTER siap");

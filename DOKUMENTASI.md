@@ -241,7 +241,7 @@ docker compose ps
 **Langkah 2 — Inisiasi replica set**
 
 ```bash
-docker compose exec -T mongos mongosh --quiet --file /scripts/01-init-cluster.js
+docker compose exec -T mongos mongosh --nodb --quiet --file /scripts/01-init-cluster.js
 ```
 
 Tunggu sampai ketiga replica set memiliki primary:
@@ -306,14 +306,14 @@ curl -G 'http://localhost:18108/collections/books/documents/search' \
 
 ```bash
 docker compose exec -T neo4j cypher-shell -u neo4j -p litapp-pass \
-  --file /var/lib/neo4j/import/seed.cypher
+  --file /scripts/seed.cypher
 ```
 
 Jalankan query rekomendasi:
 
 ```bash
 docker compose exec -T neo4j cypher-shell -u neo4j -p litapp-pass \
-  --file /var/lib/neo4j/import/queries.cypher
+  --file /scripts/queries.cypher
 ```
 
 **Langkah 7 — Isi Redis**

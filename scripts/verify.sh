@@ -45,7 +45,7 @@ check "shard1 secondary (replika): buku ub" 6 "$(scount shard1s1 secondary ub)"
 check "shard2 secondary (replika): buku unair" 3 "$(scount shard2s1 secondary unair)"
 
 echo "Typesense:"
-TS_N=$(curl -s -H "X-TYPESENSE-API-KEY: ${TYPESENSE_API_KEY}" http://localhost:18108/collections/books | grep -o '"numDocuments":[0-9]*' | cut -d: -f2 | head -n1)
+TS_N=$(curl -s -H "X-TYPESENSE-API-KEY: ${TYPESENSE_API_KEY}" http://localhost:18108/collections/books | grep -o '"num_documents":[0-9]*' | cut -d: -f2 | head -n1)
 check "books indexed" 9 "$TS_N"
 
 echo "Neo4j:"

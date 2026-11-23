@@ -33,7 +33,7 @@ wait_for "shard1p" docker compose exec -T shard1p mongosh --quiet --eval 'db.adm
 wait_for "shard2p" docker compose exec -T shard2p mongosh --quiet --eval 'db.adminCommand({ping:1}).ok'
 
 echo "[3/8] Inisiasi replica set..."
-docker compose exec -T mongos mongosh --quiet --file /scripts/01-init-cluster.js
+docker compose exec -T mongos mongosh --nodb --quiet --file /scripts/01-init-cluster.js
 
 wait_for "primary cfgRS" docker compose exec -T cfg1 mongosh --quiet --eval 'db.adminCommand({replSetGetStatus:1}).myState === 1 ? quit(0) : quit(1)'
 wait_for "primary rs1" docker compose exec -T shard1p mongosh --quiet --eval 'db.adminCommand({replSetGetStatus:1}).myState === 1 ? quit(0) : quit(1)'
@@ -52,7 +52,7 @@ TYPESENSE_API_KEY="$TYPESENSE_API_KEY" bash scripts/typesense/seed.sh
 
 echo "[7/8] Seed Neo4j..."
 wait_for "neo4j" docker compose exec -T neo4j cypher-shell -u neo4j -p "$NEO4J_PASSWORD" 'RETURN 1;'
-docker compose exec -T neo4j cypher-shell -u neo4j -p "$NEO4J_PASSWORD" --file /var/lib/neo4j/import/seed.cypher
+docker compose exec -T neo4j cypher-shell -u neo4j -p "$NEO4J_PASSWORD" --file /scripts/seed.cypher
 
 echo "[8/8] Seed Redis..."
 bash scripts/redis/seed.sh

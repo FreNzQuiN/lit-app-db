@@ -13,14 +13,14 @@ const rs2Members = [
 ];
 
 function initiateIfNeeded(host, config) {
-  const conn = connect("mongodb://" + host + ":27017");
-  const hello = conn.getDB("admin").runCommand({ hello: 1 });
+  const admin = connect("mongodb://" + host + ":27017/admin");
+  const hello = admin.runCommand({ hello: 1 });
   if (hello.setName) {
     print("SKIP " + host + " sudah bagian dari " + hello.setName);
     return;
   }
-  const res = conn.getDB("admin").runCommand({ replSetInitiate: config });
-  print("INIT " + host + " -> " + tojson(res));
+  const res = admin.runCommand({ replSetInitiate: config });
+  print("INIT " + host + " -> " + JSON.stringify(res));
 }
 
 initiateIfNeeded("cfg1", { _id: "cfgRS", configsvr: true, members: cfgMembers });
