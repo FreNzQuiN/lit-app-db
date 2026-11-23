@@ -1,0 +1,2 @@
+# Paksa akhir baris LF agar skrip bash dan file yang di-mount ke kontainer tetap jalan di Windows
+* text=auto eol=lf

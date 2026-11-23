@@ -9,8 +9,8 @@ function run(label, cmd) {
   print("OK " + label);
 }
 
-run("addShard rs1", { addShard: "rs1/shard1p:27017,shard1s1:27017,shard1s2:27017", name: "shard1" });
-run("addShard rs2", { addShard: "rs2/shard2p:27017,shard2s1:27017,shard2s2:27017", name: "shard2" });
+run("addShard rs1", { addShard: "rs1/shard1p:27017,shard1s1:27017", name: "shard1" });
+run("addShard rs2", { addShard: "rs2/shard2p:27017,shard2s1:27017", name: "shard2" });
 run("enableSharding litapp", { enableSharding: "litapp" });
 
 const db = router.getDB("litapp");
@@ -60,8 +60,8 @@ const validators = {
         userId: { bsonType: "string" },
         bookId: { bsonType: "string" },
         tglPinjam: { bsonType: "date" },
-        tglKembali: { bsonType: "date" },
-        tglKembaliAktual: { bsonType: "date" },
+        batasKembali: { bsonType: "date" },
+        tglDikembalikan: { bsonType: "date" },
         status: { enum: ["dipinjam", "dikembalikan", "terlambat"] }
       }
     }
@@ -125,8 +125,30 @@ const shardKeys = {
   reviews: { tenantId: 1, reviewId: 1 }
 };
 
+// Zona tenant: tiap kampus dikunci ke shard tertentu (ub -> shard1, unair -> shard2).
+// Tanpa zona, MongoDB bebas menaruh data kampus mana pun di shard mana pun,
+// dan dengan data sekecil ini semuanya akan menumpuk di satu shard.
+const tenantZones = { ub: "shard1", unair: "shard2" };
+
+for (const tenant of Object.keys(tenantZones)) {
+  run("addShardToZone " + tenantZones[tenant] + " -> zona_" + tenant,
+    { addShardToZone: tenantZones[tenant], zone: "zona_" + tenant });
+}
+
 for (const name of Object.keys(shardKeys)) {
   const ns = "litapp." + name;
+  const idField = Object.keys(shardKeys[name])[1];
+
+  // Rentang zona dipasang sebelum shardCollection agar chunk langsung dibuat di shard yang benar
+  for (const tenant of Object.keys(tenantZones)) {
+    run("zona " + ns + " " + tenant, {
+      updateZoneKeyRange: ns,
+      min: { tenantId: tenant, [idField]: MinKey },
+      max: { tenantId: tenant, [idField]: MaxKey },
+      zone: "zona_" + tenant
+    });
+  }
+
   const res = admin.runCommand({ shardCollection: ns, key: shardKeys[name] });
   if (res.ok !== 1 && res.code !== 20 && res.code !== 59) {
     throw new Error("FAIL shardCollection " + ns + " -> " + tojson(res));

@@ -22,7 +22,7 @@ Lit App memakai empat sistem penyimpanan, masing-masing untuk satu kebutuhan dat
 
 **Termasuk:**
 - Definisi skema/koleksi/index/validator di keempat engine
-- Topologi klaster sharded (config server, shard, replica set, mongos, Redis master–slave, klaster Typesense, Neo4j tunggal)
+- Topologi klaster sharded versi lite (config server, 2 shard replica set, mongos, Redis master–slave, Typesense, Neo4j tunggal)
 - Skrip inisialisasi, skrip seed, skrip verifikasi
 - Data contoh untuk dua tenant kampus
 
@@ -51,7 +51,7 @@ Lit App memakai empat sistem penyimpanan, masing-masing untuk satu kebutuhan dat
 - Autocomplete dan filter/faceting → Typesense
 - Rekomendasi berbasis perilaku peminjaman pengguna lain → Neo4j
 - Latensi baca rendah untuk sesi dan stok → Redis
-- Isolasi antar kampus → shard key `tenantId`
+- Isolasi antar kampus → shard key berawalan `tenantId` + zona per tenant
 
 ---
 
@@ -68,8 +68,9 @@ Presentasi menjelaskan empat pendekatan: Multi-Tenant SaaS, On-Premise (single n
                 ┌────────────────┼────────────────┐
                 │                │                │
         ┌───────▼───────┐ ┌──────▼──────┐ ┌───────▼───────┐
-        │ cfgRS (3 node)│ │  shard rs1  │ │  shard rs2    │
-        │ cfg1 cfg2 cfg3│ │ 1P + 2S     │ │ 1P + 2S       │
+        │ cfgRS (1 node)│ │  shard rs1  │ │  shard rs2    │
+        │ cfg1          │ │ 1P + 1S     │ │ 1P + 1S       │
+        │               │ │ zona_ub     │ │ zona_unair    │
         └───────────────┘ └──────┬──────┘ └───────┬───────┘
                                  │                │
                      ┌───────────▼──────┐ ┌───────▼───────────┐
@@ -78,17 +79,17 @@ Presentasi menjelaskan empat pendekatan: Multi-Tenant SaaS, On-Premise (single n
                      │ tenant: ub       │ │ tenant: unair     │
                      └──────────────────┘ └───────────────────┘
 
-        Typesense: 3 node (Raft quorum 3, replikasi penuh)
+        Typesense: 1 node
         Neo4j: 1 instance Community Edition
 ```
 
 ### 3.2 Bentuk database per engine
 
-**MongoDB.** Koleksi `users`, `books`, `loans`, `reviews` di-shard dengan shard key berawalan `tenantId`. Tiap shard adalah replica set berisi 1 primary dan 2 secondary. Primary menangani semua tulis; secondary melayani baca dan menyalin data primary. Auto-sharding memindahkan chunk otomatis saat volume tumbuh.
+**MongoDB.** Koleksi `users`, `books`, `loans`, `reviews` di-shard dengan shard key berawalan `tenantId`. Tiap shard adalah replica set berisi 1 primary (master) dan 1 secondary (slave). Primary menangani semua tulis; secondary menyalin data primary dan bisa melayani baca. Penempatan tenant dikunci dengan **zone sharding**: tenant `ub` → `shard1`, tenant `unair` → `shard2`. Balancer tetap memindahkan chunk otomatis di dalam zona saat volume tumbuh.
 
 **Redis.** Berjalan mengikuti pembagian shard. Master menyimpan `sess:` (TTL 24 jam), `book:{tenantId}:{id}:stok`, `rec:` (TTL 6 jam), dan `search:` (TTL 10 menit). Slave menyalin data master yang sama.
 
-**Typesense.** Klaster tiga node memakai Raft. Tulis ke koleksi dapat dikirim ke node mana pun dan diteruskan ke leader. Indeks bersifat proyeksi asinkron dari MongoDB, sehingga kehilangan indeks tidak menghilangkan data asli — indeks dibangun ulang dari MongoDB.
+**Typesense.** Satu node pada versi lite (versi produksi: klaster tiga node dengan Raft). Indeks bersifat proyeksi asinkron dari MongoDB, sehingga kehilangan indeks tidak menghilangkan data asli — indeks dibangun ulang dari MongoDB.
 
 **Neo4j.** Satu instance Community Edition (tidak menyediakan replikasi/klaster). Traversal dibatasi maksimal dua hop untuk menjaga biaya query. Ketahanan data mengandalkan dump/restore berkala.
 
@@ -102,7 +103,32 @@ Presentasi menjelaskan empat pendekatan: Multi-Tenant SaaS, On-Premise (single n
 
 ### 3.4 Catatan shard key
 
-Presentasi menyebut shard key `tenantId`. Implementasi memakai **shard key majemuk** `{ tenantId, <entityId> }` (mis. `{tenantId:1, bookId:1}`). Alasannya: MongoDB mewajibkan indeks unik diawali shard key agar `_id` tetap unik lintas shard, dan kardinalitas majemuk menyebarkan chunk lebih merata saat satu tenant sangat besar. `tenantId` tetap menjadi awalan, sehingga semua data satu tenant berada di satu shard (lokalisasi data).
+Presentasi menyebut shard key `tenantId`. Implementasi memakai **shard key majemuk** `{ tenantId, <entityId> }` (mis. `{tenantId:1, bookId:1}`). Alasannya: MongoDB mewajibkan indeks unik diawali shard key agar `_id` tetap unik lintas shard, dan kardinalitas majemuk menyebarkan chunk lebih merata saat satu tenant sangat besar. `tenantId` tetap menjadi awalan, sehingga data satu tenant berdekatan.
+
+Shard key saja **tidak menjamin** tenant tertentu tinggal di shard tertentu — MongoDB bebas menaruh chunk di shard mana pun, dan dengan data sekecil contoh ini semuanya akan menumpuk di satu shard. Karena itu `02-init-sharding.js` memasang **zona**:
+
+```javascript
+sh.addShardToZone("shard1", "zona_ub")
+sh.updateZoneKeyRange("litapp.books",
+  { tenantId: "ub", bookId: MinKey }, { tenantId: "ub", bookId: MaxKey }, "zona_ub")
+```
+
+Rentang zona dipasang sebelum `shardCollection`, sehingga chunk tenant langsung dibuat di shard yang benar. Kampus baru cukup ditambahkan ke objek `tenantZones`.
+
+### 3.5 Versi lite
+
+Supaya bisa jalan di laptop biasa, topologi dibuat seminimal mungkin tanpa menghilangkan konsep sharding dan master-slave:
+
+| Komponen | Produksi (presentasi) | Versi lite (repo ini) |
+|---|---|---|
+| Config server | 3 node | 1 node |
+| Anggota per shard | 1 primary + 2 secondary | 1 primary + 1 secondary |
+| Redis | master + slave per shard | sama (2 pasang) |
+| Typesense | klaster 3 node | 1 node |
+| Neo4j | 1 instance | 1 instance, heap 384 MB |
+| Total kontainer / RAM | 18 / ±6 GB | 12 / ±1,5–2 GB |
+
+Konsekuensi: dengan 2 anggota per shard, data tetap tereplikasi, tetapi bila primary mati secondary tidak bisa mengangkat dirinya menjadi primary (butuh mayoritas suara). Failover otomatis butuh minimal 3 anggota.
 
 ---
 
@@ -116,12 +142,13 @@ Ini adalah sumber kebenaran yang dipakai keempat engine. ID yang sama muncul di 
 |---|---|---|
 | `User` | `userId` | `tenantId`, `nim`, `nama`, `role`, `prodi`, `angkatan`, `email` |
 | `Book` | `bookId` | `tenantId`, `judul`, `tipe`, `pengarang`, `kategori[]`, `metadata_spesifik`, `stok`, `tersedia`, `tahun` |
-| `Loan` | `loanId` | `tenantId`, `userId`, `bookId`, `tglPinjam`, `tglKembali`, `tglKembaliAktual`, `status` |
+| `Loan` | `loanId` | `tenantId`, `userId`, `bookId`, `tglPinjam`, `batasKembali`, `tglDikembalikan`, `status` |
 | `Review` | `reviewId` | `tenantId`, `userId`, `bookId`, `rating` (1–5), `komentar`, `tgl` |
 
 Nilai `role`: `mahasiswa`, `dosen`, `admin`, `pustakawan`.
 Nilai `tipe`: `buku_teks`, `skripsi`, `novel`, `jurnal`, `ebook`.
 Nilai `status`: `dipinjam`, `dikembalikan`, `terlambat`.
+`batasKembali` = batas waktu pengembalian; `tglDikembalikan` = tanggal buku benar-benar dikembalikan (tidak ada bila masih dipinjam).
 
 ### 4.2 Pemetaan ke empat engine
 
@@ -144,25 +171,24 @@ Nilai `status`: `dipinjam`, `dikembalikan`, `terlambat`.
 | `rec:{tenantId}:{nim}` | JSON array bookId | 6 jam (21600 s) | Cache hasil rekomendasi Neo4j |
 | `search:{hash}` | JSON hasil pencarian | 10 menit (600 s) | Cache query populer |
 
-Kunci `rec:` hanya dibuat bila traversal Neo4j menghasilkan rekomendasi. Pada data contoh, hanya `u-ub-01` yang mendapat rekomendasi (`b-ub-03`); tenant `unair` belum memilikinya karena belum ada pola pinjaman yang menghasilkan rekomendasi.
+Kunci `rec:` hanya dibuat bila traversal Neo4j menghasilkan rekomendasi. Pada data contoh, hanya `u-ub-01` yang di-cache rekomendasinya (`b-ub-03`, `b-ub-06`); tenant `unair` belum memilikinya karena belum ada pola pinjaman yang menghasilkan rekomendasi.
 
 ---
 
 ## 5. Struktur File
 
 ```
-lit-app-database/
+lit-app-db/
 ├── DOKUMENTASI.md                  ← dokumen ini
-├── docker-compose.yml              ← 18 layanan (10 MongoDB, 4 Redis, 3 Typesense, 1 Neo4j)
+├── docker-compose.yml              ← 12 layanan versi lite (6 MongoDB, 4 Redis, 1 Typesense, 1 Neo4j)
 ├── .env.example                    ← contoh variabel lingkungan
-├── config/
-│   └── typesense-nodes             ← daftar 3 node untuk Raft
+├── .gitattributes                  ← memaksa akhir baris LF (penting di Windows)
 └── scripts/
     ├── run-all.sh                  ← orkestrasi seluruh langkah
     ├── verify.sh                   ← verifikasi isi keempat database
     ├── mongo/
     │   ├── 01-init-cluster.js      ← inisiasi replica set
-    │   ├── 02-init-sharding.js     ← shard, validator, index
+    │   ├── 02-init-sharding.js     ← shard, validator, index, zona tenant
     │   └── 03-seed.js              ← data contoh
     ├── typesense/
     │   ├── schema-books.json       ← definisi koleksi
@@ -181,10 +207,10 @@ lit-app-database/
 
 ### 6.1 Prasyarat
 
-- Docker Engine 24+ dan Docker Compose v2
-- `curl`, `bash`
-- RAM minimal 6 GB (18 kontainer; lihat §6.5 untuk mode ringkas)
-- Port bebas: `27017`, `7474`, `7687`, `18108`, `18109`, `18110`
+- Docker Engine 24+ / Docker Desktop dengan Docker Compose v2
+- `curl`, `bash` (di Windows: jalankan dari **Git Bash**)
+- RAM kosong ±2 GB
+- Port bebas: `27017`, `7474`, `7687`, `18108`
 
 Salin contoh environment (opsional, untuk mengganti kredensial):
 
@@ -195,7 +221,7 @@ cp .env.example .env
 ### 6.2 Jalankan semuanya (cara disarankan)
 
 ```bash
-cd lit-app-database
+cd lit-app-db
 bash scripts/run-all.sh
 ```
 
@@ -226,6 +252,8 @@ docker compose exec -T shard2p mongosh --quiet --eval 'db.adminCommand({replSetG
 docker compose exec -T cfg1 mongosh --quiet --eval 'db.adminCommand({replSetGetStatus:1}).myState'
 ```
 
+> Di Git Bash (Windows), jalankan `export MSYS_NO_PATHCONV=1` dulu sebelum perintah manual yang memakai path `/scripts/...` atau `/var/lib/...`. `run-all.sh` dan `verify.sh` sudah melakukannya sendiri.
+
 Nilai `1` berarti PRIMARY.
 
 **Langkah 3 — Daftarkan shard, buat validator & index, shard koleksi**
@@ -234,7 +262,7 @@ Nilai `1` berarti PRIMARY.
 docker compose exec -T mongos mongosh --quiet --file /scripts/02-init-sharding.js
 ```
 
-Cek topologi:
+Cek topologi dan zona:
 
 ```bash
 docker compose exec -T mongos mongosh --quiet --eval 'sh.status()'
@@ -304,36 +332,39 @@ bash scripts/verify.sh
 
 ```
 MongoDB (mongos, sharded):
-PASS users = 8
+PASS users = 9
 PASS books = 9
-PASS loans = 7
+PASS loans = 9
 PASS reviews = 4
+MongoDB (sebaran tenant per shard, dibaca langsung dari tiap shard):
+PASS shard1 primary: buku ub = 6
+PASS shard1 primary: buku unair = 0
+PASS shard2 primary: buku unair = 3
+PASS shard1 secondary (replika): buku ub = 6
+PASS shard2 secondary (replika): buku unair = 3
 Typesense:
 PASS books indexed = 9
 Neo4j:
-PASS User nodes = 8
+PASS User nodes = 9
 PASS Book nodes = 9
 PASS Category nodes = 14
-PASS PINJAM edges = 7
+PASS PINJAM edges = 9
 Redis:
 PASS stok ub b-ub-01 = 5
 PASS TTL sesi ub = 86400
 PASS stok unair b-unair-01 = 6
+PASS slave s1 menyalin stok ub = 5
 SEMUA PASS
 ```
 
 Neo4j Browser tersedia di `http://localhost:7474` (user `neo4j`, password `litapp-pass`). Typesense health: `http://localhost:18108/health`.
 
-### 6.5 Mode ringkas untuk laptop
+### 6.5 Mematikan
 
-Jika 18 kontainer terlalu berat, ubah sementara `docker-compose.yml`:
-
-- `cfg2`, `cfg3` → hapus; `cfgRS` cukup 1 anggota (`cfg1`)
-- `shard1s1`, `shard1s2`, `shard2s1`, `shard2s2` → hapus; tiap shard cukup 1 anggota
-- `typesense2`, `typesense3` → hapus; hapus juga `--nodes` dari `typesense1` (menjadi single node)
-- `redis-s1s`, `redis-s2s` → hapus
-
-Sesuaikan daftar member di `01-init-cluster.js`, daftar shard di `02-init-sharding.js`, dan isi `config/typesense-nodes`. Konsep dan query tetap sama; hanya redundansi yang berkurang.
+```bash
+docker compose down      # data tetap tersimpan di volume
+docker compose down -v   # data ikut dihapus, mulai dari nol
+```
 
 ---
 
@@ -423,7 +454,7 @@ db.users.aggregate([
 ```javascript
 db.loans.insertOne({
   tenantId: "ub", loanId: "l-baru", userId: "u-ub-01", bookId: "b-ub-01",
-  tglPinjam: new Date(), tglKembali: new Date(Date.now() + 14*86400000),
+  tglPinjam: new Date(), batasKembali: new Date(Date.now() + 14*86400000),
   status: "dipinjam"
 });
 db.books.updateOne(
@@ -473,13 +504,10 @@ curl -G 'http://localhost:18108/collections/books/documents/search' \
   --data-urlencode 'filter_by=tenantId:=ub'
 ```
 
-Cek status klaster (satu leader `state:1`, dua follower `state:4`):
+Cek kesehatan node:
 
 ```bash
-for p in 18108 18109 18110; do
-  curl -s "http://localhost:${p}/debug" -H 'X-TYPESENSE-API-KEY: litapp-secret'
-  echo
-done
+curl -s http://localhost:18108/health
 ```
 
 ### 7.3 Neo4j
@@ -503,7 +531,7 @@ ORDER BY skor DESC
 LIMIT 10;
 ```
 
-Dengan data contoh, `u-ub-01` dan `u-ub-02` sama-sama meminjam `b-ub-01`; `u-ub-02` juga meminjam `b-ub-03` yang belum dipinjam `u-ub-01` — maka `b-ub-03` menjadi rekomendasi. Ini menggantikan self-join bertingkat yang mahal di SQL/document.
+Dengan data contoh, `u-ub-01` (Faza), `u-ub-02` (Husein), dan `u-ub-06` (Reinhard) sama-sama meminjam `b-ub-01`. Husein juga meminjam `b-ub-03` dan Reinhard meminjam `b-ub-06`, yang belum dipinjam Faza — maka `b-ub-03` dan `b-ub-06` menjadi rekomendasi untuk Faza. Ini menggantikan self-join bertingkat yang mahal di SQL/document.
 
 Traversal dibatasi maksimal dua hop dari pengguna ke pengguna serupa. Hasil query disimpan di Redis sebagai `rec:{tenantId}:{nim}` dengan TTL 6 jam agar query graph tidak diulang terus-menerus.
 
@@ -531,6 +559,8 @@ Replikasi dicek dengan:
 
 ```bash
 docker compose exec -T redis-s1s redis-cli INFO replication
+docker compose exec -T redis-s1s redis-cli GET "book:ub:b-ub-01:stok"   # nilai sama dengan master
+docker compose exec -T redis-s1s redis-cli SET coba 1                   # ditolak: READONLY
 ```
 
 ---
@@ -541,10 +571,10 @@ docker compose exec -T redis-s1s redis-cli INFO replication
 
 | tenantId | Nama | Shard | Redis master |
 |---|---|---|---|
-| `ub` | Universitas Brawijaya | `rs1` | `redis-s1m` |
-| `unair` | Universitas Airlangga | `rs2` | `redis-s2m` |
+| `ub` | Universitas Brawijaya | `shard1` (`rs1`, `zona_ub`) | `redis-s1m` |
+| `unair` | Universitas Airlangga | `shard2` (`rs2`, `zona_unair`) | `redis-s2m` |
 
-### 8.2 User (8)
+### 8.2 User (9)
 
 | userId | tenantId | NIM | Nama | role |
 |---|---|---|---|---|
@@ -553,6 +583,7 @@ docker compose exec -T redis-s1s redis-cli INFO replication
 | u-ub-03 | ub | 198701010101001 | Bu Rina | dosen |
 | u-ub-04 | ub | 198512312312001 | Pak Bagas | pustakawan |
 | u-ub-05 | ub | 199003032003001 | Sinta Wulandari | admin |
+| u-ub-06 | ub | 245150707111043 | Reinhard Frano Randalinggi | mahasiswa |
 | u-unair-01 | unair | 231510700111001 | Andi Pratama | mahasiswa |
 | u-unair-02 | unair | 231510707111002 | Nadia Putri | mahasiswa |
 | u-unair-03 | unair | 198802022002001 | Dr. Dewi | dosen |
@@ -573,7 +604,7 @@ docker compose exec -T redis-s1s redis-cli INFO replication
 
 Kategori unik di Neo4j: 14 node (Basis Data, Teknologi, Kecerdasan Buatan, Skripsi, Fiksi, Novel, Jurnal, Sistem Informasi, Pemrograman, Data, Algoritma, Perpustakaan, Manajemen, Sejarah).
 
-### 8.4 Loan (7)
+### 8.4 Loan (9)
 
 | loanId | tenant | user | book | status |
 |---|---|---|---|---|
@@ -582,6 +613,8 @@ Kategori unik di Neo4j: 14 node (Basis Data, Teknologi, Kecerdasan Buatan, Skrip
 | l-ub-03 | ub | u-ub-02 | b-ub-01 | terlambat |
 | l-ub-04 | ub | u-ub-02 | b-ub-03 | dipinjam |
 | l-ub-05 | ub | u-ub-03 | b-ub-04 | dipinjam |
+| l-ub-06 | ub | u-ub-06 | b-ub-01 | dikembalikan |
+| l-ub-07 | ub | u-ub-06 | b-ub-06 | dipinjam |
 | l-unair-01 | unair | u-unair-01 | b-unair-01 | dikembalikan |
 | l-unair-02 | unair | u-unair-02 | b-unair-01 | dipinjam |
 
@@ -603,7 +636,7 @@ Kategori unik di Neo4j: 14 node (Basis Data, Teknologi, Kecerdasan Buatan, Skrip
 | `book:ub:b-ub-01:stok` | 5 | — |
 | `book:ub:b-ub-02:stok` | 1 | — |
 | `book:ub:b-ub-03:stok` | 8 | — |
-| `rec:ub:245150700111044` | `["b-ub-03"]` | 21600 |
+| `rec:ub:245150700111044` | `["b-ub-03","b-ub-06"]` | 21600 |
 | `search:a1b2c3` | hasil pencarian "basis data" | 600 |
 | `sess:token-unair-01` | sesi u-unair-01 | 86400 |
 | `book:unair:b-unair-01:stok` | 6 | — |
@@ -668,7 +701,10 @@ docker compose start neo4j
 |---|---|---|
 | `mongos` error "not yet primary" saat addShard | Replica set belum selesai pemilihan primary | Tunggu `myState === 1`, ulangi `02-init-sharding.js` |
 | `sh.status()` belum menampilkan shard | addShard gagal saat config RS belum siap | Ulangi langkah 3 setelah `cfg1` primary |
-| Typesense hanya 1 node sehat | `--peering-address` tidak cocok dengan entri `config/typesense-nodes` | Samakan hostname di `--peering-address` dengan daftar node |
+| `$'\r': command not found` saat menjalankan skrip | Clone lama sebelum ada `.gitattributes`, skrip berakhir baris CRLF | `git rm --cached -r . && git reset --hard` |
+| Error path `C:/Program Files/Git/...` | Git Bash mengubah path Linux | `export MSYS_NO_PATHCONV=1` |
+| `sh.status()` semua chunk di satu shard | Zona belum terpasang | Jalankan ulang `02-init-sharding.js` pada database kosong |
+| Kontainer Mongo mati, log menyebut AVX | CPU tidak mendukung AVX (syarat MongoDB 5+) | Ganti image ke `mongo:4.4` |
 | `curl` Typesense 401 | API key beda dengan `--api-key` di compose | Set `TYPESENSE_API_KEY` sesuai `.env` |
 | Neo4j `cypher-shell` gagal login | Password beda dengan `NEO4J_AUTH` | Set `NEO4J_PASSWORD` sesuai `.env` |
 | Redis slave tidak menyalin | `replicaof` salah nama host | Pastikan `redis-s1m` / `redis-s2m` sesuai `command` |
@@ -680,7 +716,7 @@ docker compose start neo4j
 
 - Kontainer MongoDB berjalan **tanpa autentikasi internal** karena berada di network Docker privat. Untuk produksi, aktifkan `security.keyFile` di semua `mongod`/`mongos` dan buat pengguna admin.
 - API key Typesense dan password Neo4j di sini adalah nilai contoh. Simpan di `.env` (gitignored) dan gunakan secret manager untuk produksi.
-- Topologi 18 kontainer ditujukan untuk mendemonstrasikan arsitektur sharded. Lihat §6.5 untuk mode ringkas.
+- Versi lite: config server 1 node dan 2 anggota per shard, sehingga tidak ada failover otomatis (lihat §3.5).
 - Pipeline sinkronisasi MongoDB → Typesense/Neo4j dijelaskan sebagai konsep; implementasi change-stream produksi tidak termasuk cakupan layer database ini.
 
 ---
@@ -688,7 +724,7 @@ docker compose start neo4j
 ## 13. Rangkuman Perintah
 
 ```bash
-cd lit-app-database
+cd lit-app-db
 cp .env.example .env              # opsional
 bash scripts/run-all.sh           # nyalakan + init + seed semua
 bash scripts/verify.sh            # cek isi keempat database

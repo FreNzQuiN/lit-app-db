@@ -1,19 +1,15 @@
 const cfgMembers = [
-  { _id: 0, host: "cfg1:27017" },
-  { _id: 1, host: "cfg2:27017" },
-  { _id: 2, host: "cfg3:27017" }
+  { _id: 0, host: "cfg1:27017" }
 ];
 
 const rs1Members = [
   { _id: 0, host: "shard1p:27017", priority: 2 },
-  { _id: 1, host: "shard1s1:27017", priority: 1 },
-  { _id: 2, host: "shard1s2:27017", priority: 1 }
+  { _id: 1, host: "shard1s1:27017", priority: 1 }
 ];
 
 const rs2Members = [
   { _id: 0, host: "shard2p:27017", priority: 2 },
-  { _id: 1, host: "shard2s1:27017", priority: 1 },
-  { _id: 2, host: "shard2s2:27017", priority: 1 }
+  { _id: 1, host: "shard2s1:27017", priority: 1 }
 ];
 
 function initiateIfNeeded(host, config) {
@@ -27,6 +23,6 @@ function initiateIfNeeded(host, config) {
   print("INIT " + host + " -> " + tojson(res));
 }
 
-initiateIfNeeded("cfg1", { _id: "cfgRS", members: cfgMembers });
+initiateIfNeeded("cfg1", { _id: "cfgRS", configsvr: true, members: cfgMembers });
 initiateIfNeeded("shard1p", { _id: "rs1", members: rs1Members });
 initiateIfNeeded("shard2p", { _id: "rs2", members: rs2Members });

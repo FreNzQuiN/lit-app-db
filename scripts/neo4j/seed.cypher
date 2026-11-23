@@ -7,6 +7,7 @@ MERGE (u:User {userId:'u-ub-02'}) SET u.tenantId='ub', u.nim='245150707111040', 
 MERGE (u:User {userId:'u-ub-03'}) SET u.tenantId='ub', u.nim='198701010101001', u.nama='Bu Rina', u.role='dosen';
 MERGE (u:User {userId:'u-ub-04'}) SET u.tenantId='ub', u.nim='198512312312001', u.nama='Pak Bagas', u.role='pustakawan';
 MERGE (u:User {userId:'u-ub-05'}) SET u.tenantId='ub', u.nim='199003032003001', u.nama='Sinta Wulandari', u.role='admin';
+MERGE (u:User {userId:'u-ub-06'}) SET u.tenantId='ub', u.nim='245150707111043', u.nama='Reinhard Frano Randalinggi', u.role='mahasiswa';
 MERGE (u:User {userId:'u-unair-01'}) SET u.tenantId='unair', u.nim='231510700111001', u.nama='Andi Pratama', u.role='mahasiswa';
 MERGE (u:User {userId:'u-unair-02'}) SET u.tenantId='unair', u.nim='231510707111002', u.nama='Nadia Putri', u.role='mahasiswa';
 MERGE (u:User {userId:'u-unair-03'}) SET u.tenantId='unair', u.nim='198802022002001', u.nama='Dr. Dewi', u.role='dosen';
@@ -41,6 +42,8 @@ MATCH (u:User {userId:'u-ub-01'}), (b:Book {bookId:'b-ub-02'}) MERGE (u)-[:PINJA
 MATCH (u:User {userId:'u-ub-02'}), (b:Book {bookId:'b-ub-01'}) MERGE (u)-[:PINJAM {loanId:'l-ub-03', tenantId:'ub', tglPinjam:'2026-10-20', status:'terlambat'}]->(b);
 MATCH (u:User {userId:'u-ub-02'}), (b:Book {bookId:'b-ub-03'}) MERGE (u)-[:PINJAM {loanId:'l-ub-04', tenantId:'ub', tglPinjam:'2026-11-05', status:'dipinjam'}]->(b);
 MATCH (u:User {userId:'u-ub-03'}), (b:Book {bookId:'b-ub-04'}) MERGE (u)-[:PINJAM {loanId:'l-ub-05', tenantId:'ub', tglPinjam:'2026-11-10', status:'dipinjam'}]->(b);
+MATCH (u:User {userId:'u-ub-06'}), (b:Book {bookId:'b-ub-01'}) MERGE (u)-[:PINJAM {loanId:'l-ub-06', tenantId:'ub', tglPinjam:'2026-11-04', status:'dikembalikan'}]->(b);
+MATCH (u:User {userId:'u-ub-06'}), (b:Book {bookId:'b-ub-06'}) MERGE (u)-[:PINJAM {loanId:'l-ub-07', tenantId:'ub', tglPinjam:'2026-11-12', status:'dipinjam'}]->(b);
 MATCH (u:User {userId:'u-unair-01'}), (b:Book {bookId:'b-unair-01'}) MERGE (u)-[:PINJAM {loanId:'l-unair-01', tenantId:'unair', tglPinjam:'2026-11-01', status:'dikembalikan'}]->(b);
 MATCH (u:User {userId:'u-unair-02'}), (b:Book {bookId:'b-unair-01'}) MERGE (u)-[:PINJAM {loanId:'l-unair-02', tenantId:'unair', tglPinjam:'2026-11-03', status:'dipinjam'}]->(b);
 

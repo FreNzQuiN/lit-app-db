@@ -14,7 +14,7 @@ s1 SET "sess:token-ub-02" '{"userId":"u-ub-02","tenantId":"ub","role":"mahasiswa
 s1 SET "book:ub:b-ub-01:stok" 5
 s1 SET "book:ub:b-ub-02:stok" 1
 s1 SET "book:ub:b-ub-03:stok" 8
-s1 SET "rec:ub:245150700111044" '["b-ub-03"]' EX 21600
+s1 SET "rec:ub:245150700111044" '["b-ub-03","b-ub-06"]' EX 21600
 s1 SET "search:a1b2c3" '{"q":"basis data","tenantId":"ub","hits":["b-ub-01","b-ub-06"]}' EX 600
 
 echo "Menyiapkan shard Redis 2 (tenant unair)..."
